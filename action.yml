@@ -1,4 +1,4 @@
-name: Symfony AssetMapper Update
+name: Symfony AssetMapper Importmap Update
 description: Opens and maintains pull requests for outdated and vulnerable Symfony AssetMapper importmap.php dependencies.
 author: Christopher Hertel
 branding:

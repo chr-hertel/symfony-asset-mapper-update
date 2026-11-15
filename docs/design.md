@@ -174,7 +174,7 @@ Fixtures: `importmap-multiline.php` → `importmap-multiline-after-require.php`,
   environment. Git gets the credentials through `GIT_CONFIG_COUNT`/`_KEY_n`/`_VALUE_n`, so they do
   not show up in the process list.
 - **Names:** repository `chr-hertel/symfony-asset-mapper-update`, Composer package
-  `hertel/symfony-asset-mapper-update`, action name "Symfony AssetMapper Update", PR marker
+  `hertel/symfony-asset-mapper-update`, action name "Symfony AssetMapper Importmap Update", PR marker
   `<!-- asset-mapper-update {...} -->`. The marker holds the state of the PR (bucket and updates),
   so the action can tell whether a PR is up to date without rebuilding it. Do not change its format
   without a new `v`.

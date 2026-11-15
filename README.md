@@ -1,4 +1,4 @@
-# Symfony AssetMapper Update
+# Symfony AssetMapper Importmap Update
 
 A GitHub Action that keeps the JavaScript and CSS dependencies in the `importmap.php` of a Symfony
 [AssetMapper](https://symfony.com/doc/current/frontend/asset_mapper.html) app up to date. It is like
