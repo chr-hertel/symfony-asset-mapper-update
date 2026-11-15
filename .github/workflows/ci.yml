@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  qa:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          coverage: none
+      - run: composer validate --strict
+      - uses: ramsey/composer-install@v4
+      - name: Coding style
+        run: vendor/bin/php-cs-fixer fix --dry-run --diff
+      - name: Static analysis
+        run: vendor/bin/phpstan analyse --no-progress
+
+  tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - php: '8.2'
+            dependencies: lowest
+          - php: '8.2'
+            dependencies: locked
+          - php: '8.4'
+            dependencies: highest
+          - php: '8.5'
+            dependencies: highest
+    name: tests (PHP ${{ matrix.php }}, ${{ matrix.dependencies }})
+    steps:
+      - uses: actions/checkout@v7
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+      - name: Use the real PHP version for "highest"
+        if: matrix.dependencies == 'highest'
+        run: composer config --unset platform.php
+      - uses: ramsey/composer-install@v4
+        with:
+          dependency-versions: ${{ matrix.dependencies }}
+      - run: vendor/bin/phpunit

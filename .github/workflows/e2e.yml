@@ -1,0 +1,118 @@
+name: e2e
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  dry-run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - run: echo "APP_DIR=$RUNNER_TEMP/app" >> "$GITHUB_ENV"
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          tools: composer
+
+      - name: Create a Symfony app with old pinned packages
+        run: |
+          composer create-project symfony/skeleton "$APP_DIR" --no-interaction --quiet
+          cd "$APP_DIR"
+          composer require symfony/asset-mapper --no-interaction --quiet
+          # bootstrap: patch, minor and major available + CSS entry, lodash/jquery: known advisories,
+          # @hotwired/stimulus: scoped package, app: local entrypoint without version.
+          php bin/console importmap:require bootstrap@4.6.0 lodash@4.17.15 @hotwired/stimulus@3.0.0 jquery@3.4.1
+          cat importmap.php
+          # The action works on a git repository with an "origin" remote.
+          git init --quiet --initial-branch=main
+          git -c user.name=e2e -c user.email=e2e@example.com commit --quiet --allow-empty -m init
+          git add --all
+          git -c user.name=e2e -c user.email=e2e@example.com commit --quiet -m "App with old pins"
+          git init --quiet --bare "$RUNNER_TEMP/origin.git"
+          git remote add origin "$RUNNER_TEMP/origin.git"
+          git push --quiet origin main
+
+      - name: Run the action (default config)
+        id: default
+        uses: ./
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          working-directory: ${{ env.APP_DIR }}
+          base-branch: main
+          dry-run: true
+
+      - name: Assert the plan (default config)
+        env:
+          PLAN: ${{ steps.default.outputs.plan }}
+          PRS: ${{ steps.default.outputs.pull-requests }}
+        run: |
+          echo "$PLAN" | jq .
+          echo "$PRS" | jq .
+          check() { echo "$PLAN" | jq -e "$1" > /dev/null || { echo "::error::Assertion failed: $1"; exit 1; }; }
+          # lodash and jquery are vulnerable: individual security PRs, ordered first
+          check '.pullRequests[0].bucket == "security"'
+          check '.pullRequests[] | select(.branch == "importmap-updates/security/lodash") | .updates[0] | .from == "4.17.15" and (.to | split(".") | map(tonumber) | .[0] == 4 and .[1] >= 18) and (.advisories | length > 0)'
+          check '.pullRequests[] | select(.branch == "importmap-updates/security/jquery") | .updates[0] | .from == "3.4.1" and (.to | startswith("3."))'
+          # bootstrap's only advisory is withdrawn, so it is a regular major update incl. its CSS entry
+          check '.pullRequests[] | select(.branch == "importmap-updates/major/bootstrap") | .updates[0] | .updateType == "major" and .entries == ["bootstrap", "bootstrap/dist/css/bootstrap.min.css"]'
+          # stimulus goes into the grouped minor PR
+          check '.pullRequests[] | select(.branch == "importmap-updates/minor") | .strategy == "grouped" and (.updates | map(.name) | index("@hotwired/stimulus") != null)'
+          # local entries and CSS entries never get their own PR
+          check '[.pullRequests[].updates[].name] | (index("app") == null) and (index("bootstrap/dist/css/bootstrap.min.css") == null)'
+          # dry-run: nothing was pushed, every PR would be created
+          echo "$PRS" | jq -e 'length >= 4 and all(.[]; .action == "created" and .dryRun == true and .number == null)' > /dev/null
+          # the app repository is untouched
+          cd "$APP_DIR"
+          test "$(git rev-parse --abbrev-ref HEAD)" = main
+          test -z "$(git status --porcelain --untracked-files=no)"
+          test -z "$(git ls-remote --heads origin 'importmap-updates/*')"
+
+      - name: Add a config file
+        run: |
+          cd "$APP_DIR"
+          mkdir -p .github
+          cat > .github/importmap-updates.yml <<'YAML'
+          version: 1
+          grouping:
+            security: { strategy: grouped }
+            minor: { strategy: skip }
+          ignore:
+            - name: bootstrap
+              update-types: [major]
+          branch_prefix: deps
+          YAML
+          git add .github
+          git -c user.name=e2e -c user.email=e2e@example.com commit --quiet -m "Add config"
+          git push --quiet origin main
+
+      - name: Run the action (custom config)
+        id: custom
+        uses: ./
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          working-directory: ${{ env.APP_DIR }}
+          base-branch: main
+          dry-run: true
+
+      - name: Assert the plan (custom config)
+        env:
+          PLAN: ${{ steps.custom.outputs.plan }}
+        run: |
+          echo "$PLAN" | jq .
+          check() { echo "$PLAN" | jq -e "$1" > /dev/null || { echo "::error::Assertion failed: $1"; exit 1; }; }
+          # one grouped security PR with lodash and jquery
+          check '.pullRequests[0].branch == "deps/security" and (.pullRequests[0].updates | map(.name) | sort) == ["jquery", "lodash"]'
+          # bootstrap major ignored → falls back to the latest 4.6.x patch (4.x is deprecated on npm, but it is all there is)
+          check '.pullRequests[] | select(.branch == "deps/patch") | .updates[] | select(.name == "bootstrap") | .to == "4.6.2" and .updateType == "patch" and (.reason | test("deprecated"))'
+          # minor is skipped → stimulus falls back to its latest 3.0.x patch
+          check '.pullRequests[] | select(.branch == "deps/patch") | .updates[] | select(.name == "@hotwired/stimulus") | .updateType == "patch" and (.reason | test("skip"))'
+          check '[.pullRequests[].branch] | index("deps/major/bootstrap") == null and index("deps/minor") == null'

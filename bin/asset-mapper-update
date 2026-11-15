@@ -1,0 +1,22 @@
+#!/usr/bin/env php
+<?php
+
+use AssetMapperUpdate\Command\UpdateCommand;
+use Symfony\Component\Console\Application;
+
+foreach ([__DIR__.'/../vendor/autoload.php', __DIR__.'/../../../autoload.php'] as $autoload) {
+    if (is_file($autoload)) {
+        require $autoload;
+        break;
+    }
+}
+if (!class_exists(Application::class)) {
+    fwrite(\STDERR, "Run \"composer install\" first.\n");
+    exit(1);
+}
+
+$command = new UpdateCommand();
+$application = new Application('asset-mapper-update');
+$application->addCommand($command);
+$application->setDefaultCommand((string) $command->getName(), true);
+$application->run();

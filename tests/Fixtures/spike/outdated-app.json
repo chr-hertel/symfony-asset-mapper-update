@@ -1,0 +1,38 @@
+[
+    {
+        "name": "bootstrap",
+        "current": "5.3.8",
+        "latest": "5.3.9",
+        "latest-status": "semver-safe-update"
+    },
+    {
+        "name": "bootstrap/dist/css/bootstrap.min.css",
+        "current": "5.3.8",
+        "latest": "5.3.9",
+        "latest-status": "semver-safe-update"
+    },
+    {
+        "name": "@fortawesome/fontawesome-free",
+        "current": "6.5.1",
+        "latest": "7.3.1",
+        "latest-status": "update-possible"
+    },
+    {
+        "name": "@fortawesome/fontawesome-free/css/fontawesome.min.css",
+        "current": "6.5.1",
+        "latest": "7.3.1",
+        "latest-status": "update-possible"
+    },
+    {
+        "name": "@hotwired/turbo",
+        "current": "7.3.0",
+        "latest": "8.0.23",
+        "latest-status": "update-possible"
+    },
+    {
+        "name": "js-confetti",
+        "current": "0.12.0",
+        "latest": "0.13.1",
+        "latest-status": "semver-safe-update"
+    }
+]

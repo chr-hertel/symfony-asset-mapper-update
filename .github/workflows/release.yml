@@ -1,0 +1,43 @@
+name: Release
+
+# Moves the rolling major tag (v1) to every new stable release (1.x.y), so `@v1` gets it.
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-major-tag
+  cancel-in-progress: false
+
+jobs:
+  major-tag:
+    if: ${{ !github.event.release.prerelease }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Move the major tag
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          if [[ ! "$TAG" =~ ^([0-9]+)\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Release tag \"$TAG\" is not a stable version like 1.2.3; not moving a major tag."
+            exit 1
+          fi
+          major="${BASH_REMATCH[1]}"
+          latest=$(git tag --list "$major.*" | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)
+          if [ "$latest" != "$TAG" ]; then
+            echo "::notice::$TAG is not the latest $major.x release ($latest), so v$major stays where it is."
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git tag --force --annotate "v$major" --message "Update v$major tag to $TAG" "$TAG^{commit}"
+          git push --force origin "refs/tags/v$major"
+          echo "::notice::v$major now points to $TAG ($(git rev-parse --short "$TAG^{commit}"))."

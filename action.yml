@@ -1,0 +1,78 @@
+name: Symfony AssetMapper Update
+description: Opens and maintains pull requests for outdated and vulnerable Symfony AssetMapper importmap.php dependencies.
+author: Christopher Hertel
+branding:
+  icon: package
+  color: purple
+
+inputs:
+  github-token:
+    description: Token for git push and the GitHub API. PRs opened with the default GITHUB_TOKEN do not trigger other workflows; use a GitHub App token or PAT for that.
+    required: true
+  console:
+    description: Command used to call the Symfony console.
+    required: false
+    default: php bin/console
+  working-directory:
+    description: Directory of the Symfony application (the one that contains importmap.php), relative to the workspace.
+    required: false
+    default: .
+  config-file:
+    description: Path of the optional config file, relative to the repository root.
+    required: false
+    default: .github/importmap-updates.yml
+  dry-run:
+    description: Compute and apply everything locally, but do not push, create, update or close anything.
+    required: false
+    default: 'false'
+  base-branch:
+    description: Branch the pull requests target. Defaults to the repository's default branch.
+    required: false
+    default: ''
+
+outputs:
+  plan:
+    description: JSON of the computed plan (pull requests with packages, from/to versions, update type, reason; skipped packages).
+    value: ${{ steps.update.outputs.plan }}
+  pull-requests:
+    description: JSON list of pull requests created, updated, closed or left unchanged ({action, number, url, branch, dryRun}).
+    value: ${{ steps.update.outputs.pull-requests }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install asset-mapper-update
+      shell: bash
+      run: |
+        if ! command -v php > /dev/null || ! command -v composer > /dev/null; then
+          echo "::error::asset-mapper-update needs PHP and Composer. Set them up first, e.g. with shivammathur/setup-php."
+          exit 1
+        fi
+        composer install --working-dir="$GITHUB_ACTION_PATH" --no-dev --no-interaction --no-progress --prefer-dist --optimize-autoloader --quiet
+
+    - name: Update importmap dependencies
+      id: update
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        INPUT_CONSOLE: ${{ inputs.console }}
+        INPUT_WORKING_DIRECTORY: ${{ inputs.working-directory }}
+        INPUT_CONFIG_FILE: ${{ inputs.config-file }}
+        INPUT_DRY_RUN: ${{ inputs.dry-run }}
+        INPUT_BASE_BRANCH: ${{ inputs.base-branch }}
+      run: |
+        args=(
+          --console="$INPUT_CONSOLE"
+          --working-directory="$INPUT_WORKING_DIRECTORY"
+          --config-file="$INPUT_CONFIG_FILE"
+          --no-interaction
+        )
+        if [ -n "$INPUT_BASE_BRANCH" ]; then
+          args+=(--base-branch="$INPUT_BASE_BRANCH")
+        fi
+        case "$INPUT_DRY_RUN" in
+          true|True|TRUE) args+=(--dry-run) ;;
+          false|False|FALSE|'') ;;
+          *) echo "::error::Input \"dry-run\" must be true or false, got \"$INPUT_DRY_RUN\"."; exit 1 ;;
+        esac
+        php "$GITHUB_ACTION_PATH/bin/asset-mapper-update" "${args[@]}"
